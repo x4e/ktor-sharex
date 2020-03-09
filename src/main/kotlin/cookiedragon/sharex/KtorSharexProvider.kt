@@ -61,12 +61,6 @@ fun Routing.shareX(folder: String = "") {
 						ext = File(part.originalFileName!!).extension
 						stream = part.streamProvider
 					}
-					is PartData.BinaryItem -> {
-						println(part.headers)
-						println(part.contentDisposition)
-						println(part.contentType)
-						println(part.name)
-					}
 				}
 			}
 			
