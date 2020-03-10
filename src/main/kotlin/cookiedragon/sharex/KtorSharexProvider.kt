@@ -9,6 +9,7 @@ import io.ktor.application.call
 import io.ktor.http.content.*
 import io.ktor.request.receiveMultipart
 import io.ktor.response.respondText
+import io.ktor.routing.Route
 import io.ktor.routing.Routing
 import io.ktor.routing.post
 import io.ktor.routing.route
@@ -28,9 +29,7 @@ import java.util.UUID
 object ShareX: ApplicationFeature<ApplicationCallPipeline, ShareX, ShareX> {
 	var token: String? = null
 	var directory: File = File("i")
-	var fileNameProvider: () -> String = {
-		UUID.randomUUID().toString()
-	}
+	var fileNameProvider: () -> String = MillisecondsFileNameGenerator
 	
 	override val key: AttributeKey<ShareX> = AttributeKey("ShareX")
 	
@@ -41,55 +40,60 @@ object ShareX: ApplicationFeature<ApplicationCallPipeline, ShareX, ShareX> {
 			}
 		}
 	}
+	
+	object UUIDFileNameGenerator: () -> String {
+		override fun invoke(): String = UUID.randomUUID().toString().replace("-", "")
+	}
+	
+	object MillisecondsFileNameGenerator: () -> String {
+		override fun invoke(): String = System.currentTimeMillis().toString(36)
+	}
 }
 
-fun Routing.shareX(folder: String = "") {
-	route(folder) {
-		post("upload") {
-			val multipart = this.call.receiveMultipart()
-			var secret: String? = null
-			var ext: String? = null
-			var stream: (() -> InputStream)? = null
-			multipart.forEachPart { part ->
-				when (part) {
-					is PartData.FormItem -> {
-						if (part.name == "token") {
-							secret = part.value
-						}
-					}
-					is PartData.FileItem -> {
-						ext = File(part.originalFileName!!).extension
-						stream = part.streamProvider
+fun Route.shareXUpload(folder: String = "") {
+	post (folder) {
+		val multipart = this.call.receiveMultipart()
+		var secret: String? = null
+		var ext: String? = null
+		var stream: (() -> InputStream)? = null
+		multipart.forEachPart { part ->
+			when (part) {
+				is PartData.FormItem -> {
+					if (part.name == "token") {
+						secret = part.value
 					}
 				}
-			}
-			
-			when {
-				secret == null -> error("Invalid parameters: Supply a secret")
-				ext == null    -> error("Invalid parameters: Supply an extension")
-				stream == null -> error("Invalid parameters: Supply a stream")
-			}
-			
-			if (secret != null && ext != null && stream != null) {
-				if (token == null || token == secret) {
-					val childFile = "${fileNameProvider()}.$ext"
-					val file = File(directory, childFile)
-					stream!!().use { input ->
-						file.outputStream().buffered().use { output ->
-							input.copyToSuspend(output)
-						}
-						// This assumes that the shareX call is not nested within routes. Not the best option but I cant
-						// think of another way, so this will do for now.
-						call.respondText("${folder.removeSuffix("/")}/get/$childFile")
-						return@post
-					}
+				is PartData.FileItem -> {
+					ext = File(part.originalFileName!!).extension
+					stream = part.streamProvider
 				}
 			}
-			error("Invalid parameters")
 		}
-		static ("get") {
-			files(directory)
+		
+		when {
+			secret == null -> error("Invalid parameters: Supply a secret")
+			ext == null    -> error("Invalid parameters: Supply an extension")
+			stream == null -> error("Invalid parameters: Supply a stream")
 		}
+		
+		if (token == null || token == secret) {
+			val childFile = "${fileNameProvider()}.$ext"
+			val file = File(directory, childFile)
+			stream!!().use { input ->
+				file.outputStream().buffered().use { output ->
+					input.copyToSuspend(output)
+				}
+				call.respondText(childFile)
+				return@post
+			}
+		}
+		error("Invalid parameters")
+	}
+}
+
+fun Route.shareXHost(folder: String = "") {
+	static(folder) {
+		files(directory)
 	}
 }
 
