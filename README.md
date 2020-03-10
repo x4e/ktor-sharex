@@ -8,11 +8,18 @@ fun Application.module() {
 		token = "verysecrettokenhere"
 	}
 	
-	install(Routing) {
-		shareX("sharex")
+	route("sharex") {
+		shareXUpload("upload")
+		shareXHost("get")
+	}
+	
+	host(Regex("i\\..+")) {
+		shareXHost()
 	}
 }
 ```
+This will create an upload endpoint at example.com/sharex/upload, and hosting endpoints at both example.com/sharex/get and i.example.com
+
 
 ShareX config:
 ```Json
@@ -27,6 +34,6 @@ ShareX config:
     "token": "verysecrettokenhere"
   },
   "FileFormName": "file",
-  "URL": "https://[websiteURL]/$response$"
+  "URL": "https://i.[websiteURL]/$response$"
 }
 ```
